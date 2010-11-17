@@ -1,0 +1,104 @@
+UNIX SHELL
+Author: Kefei Dan Zhou
+Date: 10/06/2007
+
+
+Section 1 : Data Structure
+--------------------------
+
+PROCGROUP is the data storage for a process group. Each PROCGROUP contains group pid, current 
+status, and the command line that started the process group. Everytime the shell execute a job, 
+a PROCGROUP is created with the corresponding data. If the job is in foreground and exits, the 
+shell frees the PROCGROUP. If the job is started in background or is placed in the background, 
+PROCGROUP is loaded into pidtable. If the job is in the pidtable when it exits, the pidtable 
+will handle the deallocation.
+
+PIDTABLE is an unrolled linked list for storing a list of running processes in the background.
+Each node of the pidtable contains an array of fixed size (specified by PTABLE_SIZE). At 
+initialization, the pidtable contains a single node. New nodes are automatically created when 
+the current capacity is full, and empty nodes are deallocated with regards certain threshold 
+level. PIDTABLE is used extensively by the shell to store and display process group info.
+
+Main functions of PIDTABLE:
+ add: insert a PROCGROUP struct into the first available stop in the array
+ delete: delete (and/or deallocate) a PROCGROUP from the table
+ get by pid: returns PROCGROUP with the matching group pid
+ get by index: returns the nth PROCGROUP in the array
+
+COMMAND is linked list of parsed and processed commands/jobs. COMMAND contains, most importantly,
+an array of arguments for exec system calls, a pointer to the next COMMAND, and flags specify 
+background, pipe, file i/o mode. COMMAND is created by command parser and must be deallocated 
+manually after use.
+
+
+Section 2 : Implementation
+--------------------------
+
+Parsing Commmand
+Beginning with some string the parser tokenizes the string and creates an array for the tokens.
+The parser checks for background "&", file redirect, pipes and set the flags in COMMAND struct.
+Each command also copies in the job command line to be used by the pidtable. For each command 
+separated by pipe or semmicolon, a new COMMAND is created. This list of commands could contains 
+one or more jobs (this is taken care of by the exec_command function).
+
+At the end of the parsing process, one or more COMMAND struct is created. The first pointer in 
+the list is returned and passed to function to be executed.
+
+Executing Command
+For the purpose of this shell, we classify the execution into three types: standard command (possibly
+with backgrounding, file redirect), pipe command (foreground/background, file redirect), and internal 
+command implemented by the shell.
+
+The exce_command function first check if the current command is one of the internal command. If true
+the shell execute the apropriate routine (from display directory to updating job table).
+If current command is a pipe command, the shell calls pipe_command function which executes a single 
+pipe and returns. Executing pipe command and standard command is handled similiarly except in the 
+case of pipes, a loop is used for some arbitrary length pipe job.
+
+
+Job Control
+Foreground command: following fork, both parent and child set the group pid for the child and pass 
+the control of the terminal to child. The parent creates a PROCGROUP struct for this process and wait.
+
+Background command: same as foreground, except control of the terminal is not passed to the child.
+In the parent, the new PROCGROUP is added to the job table.
+
+Ctrl-Z: send stop signal to the foreground group and move the foreground PROCGROUP to pidtable.
+
+BG %n: shell looks up the pidtable to get the group pid and sends SIGCONT signal.
+
+FG %n: shell looks up the pidtable to get the PROCGROUP. PRCOGROUP is moved to the foreground and deleted
+from the pidtable. The shell then pass control of the terminal to the group, send SIGCONT signal and wait.
+
+Kill %n: shell looks up the pidtable to get the group pid for the nth job and sends SIGTERM signal to 
+force terminate the command. 
+
+
+Critical Section
+Both pidtable and foreground procgroup can be modified by the sighandler, so sigprocmask() is used to
+block all signals anytime when either procgroup or pidtable are modified by the shell. 
+
+
+Section 3 : Features
+--------------------
+
+Design Feature
+	+ Unrolled linked list for improved performance compared to standard linkedlist
+
+User Features:
+	+ Colored prompt with current working directory
+	+ Support for ";" in command line. This allow multiple jobs to be entered in one line
+	+ No strict requirement for whitespace on commandline ">", ">>", "<", "&"
+		so 'sleep 10 &' is same as 'sleep 10&'
+
+
+Section 4 : Testing
+-------------------
+
+For each major component of the shell (PROCGROUP, PIDTABLE, parser), unittest is used 
+to test the basic functionality of each methods. Specifics include testing allocating/deallocating
+each struct, check for correctness for both common and edge cases.
+
+To ensure the shell is free of memory leak, valgrind is ran along with the unittest.
+
+The shell is extensively tested with various commands with file redirecting, piping, and job control.

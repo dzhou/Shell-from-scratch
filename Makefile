@@ -6,43 +6,16 @@ SHELL = /bin/sh
 GCC = /usr/bin/gcc
 GCC_OPT = -Wall -g
 LIBS = -lreadline
+MAKE  = make 
 
 # DIRECTORIES
 topdir = .
-srcdir = .
-bindir = .
-
-# C Program
-TARGETS = mysh
-
-# Library
-OBJS =	debug.o \
-		procgroup.o \
-		pidtable.o \
-		parser.o \
-		sighandler.o 
-
-#Unittests
-TEST =	procgroup_test \
-		pidtable_test \
-		parser_test
+srcdir = src
+bindir = bin
 
 ### MAKE ###
-all: $(OBJS) $(TARGETS) $(TEST)
+all: 	
+	$(MAKE) -C $(srcdir) all
 
-%: %.c $(OBJS) Makefile include.h
-	$(GCC) $(GCC_OPT) $(OBJS) $@.c $(LIBS) -o $@
-
-%.o: %.c %.h Makefile include.h
-	$(GCC) $(GCC_OPT) -c $<
-
-
-# Clean up 
-clean:
-	rm -f $(TARGETS) $(OBJS) $(TEST)
-	rm -f *~ *.obj *.exe *.o
-
-check:
-	valgrind ./procgroup_test
-	valgrind ./pidtable_test
-	valgrind ./parser_test
+clean: 
+	$(MAKE) -C $(srcdir) clean 
